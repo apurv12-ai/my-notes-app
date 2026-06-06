@@ -1,6 +1,43 @@
 import { useState, useEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { supabase } from './supabaseClient'
+
+function Auth({ darkMode }) {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [isLogin, setIsLogin] = useState(true)
+  const [message, setMessage] = useState('')
+
+  async function handleAuth() {
+    if (isLogin) {
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      if (error) setMessage(error.message)
+    } else {
+      const { error } = await supabase.auth.signUp({ email, password })
+      if (error) setMessage(error.message)
+      else setMessage('Check your email to confirm your account!')
+    }
+  }
+
+  return (
+    <div className={`flex h-screen items-center justify-center ${darkMode ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-900'}`}>
+      <div className={`p-8 rounded-xl w-96 ${darkMode ? 'bg-gray-800' : 'bg-white shadow-lg'}`}>
+        <h1 className="text-2xl font-bold mb-6 text-center">📝 My Notes</h1>
+        <h2 className="text-lg font-semibold mb-4 text-center">{isLogin ? 'Sign In' : 'Sign Up'}</h2>
+        <input className={`w-full px-4 py-2 rounded mb-3 outline-none ${darkMode ? 'bg-gray-700 text-white' : 'bg-gray-100 text-gray-900'}`} placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} />
+        <input className={`w-full px-4 py-2 rounded mb-3 outline-none ${darkMode ? 'bg-gray-700 text-white' : 'bg-gray-100 text-gray-900'}`} placeholder="Password" type="password" value={password} onChange={e => setPassword(e.target.value)} />
+        {message && <p className="text-sm text-yellow-400 mb-3">{message}</p>}
+        <button onClick={handleAuth} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded font-semibold mb-3">
+          {isLogin ? 'Sign In' : 'Sign Up'}
+        </button>
+        <p className="text-center text-sm text-gray-400 cursor-pointer hover:text-white" onClick={() => setIsLogin(!isLogin)}>
+          {isLogin ? "Don't have an account? Sign Up" : "Already have an account? Sign In"}
+        </p>
+      </div>
+    </div>
+  )
+}
+
 function App() {
   const [notes, setNotes] = useState([])
   const [selectedNote, setSelectedNote] = useState(null)
@@ -8,11 +45,30 @@ function App() {
   const [selectedTag, setSelectedTag] = useState(null)
   const [tagInput, setTagInput] = useState('')
   const [darkMode, setDarkMode] = useState(true)
-  useEffect(() => { fetchNotes() }, [])
+  const [user, setUser] = useState(null)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null)
+    })
+    supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+    })
+  }, [])
+
+  useEffect(() => { if (user) fetchNotes() }, [user])
+
   async function fetchNotes() {
     const { data } = await supabase.from('notes').select('*').order('created_at', { ascending: false })
     if (data) { setNotes(data); setSelectedNote(data[0] || null) }
   }
+
+  async function signOut() {
+    await supabase.auth.signOut()
+    setNotes([])
+    setSelectedNote(null)
+  }
+
   const allTags = [...new Set(notes.flatMap(n => JSON.parse(n.tags || '[]')))]
   const filteredNotes = notes
     .filter(n => {
@@ -22,21 +78,25 @@ function App() {
       return matchesSearch && matchesTag
     })
     .sort((a, b) => (b.pinned === true) - (a.pinned === true))
+
   async function createNote() {
-    const { data } = await supabase.from('notes').insert({ title: 'Untitled Note', content: '', tags: '[]', pinned: false }).select()
+    const { data } = await supabase.from('notes').insert({ title: 'Untitled Note', content: '', tags: '[]', pinned: false, user_id: user.id }).select()
     if (data) { setNotes([data[0], ...notes]); setSelectedNote(data[0]) }
   }
+
   async function pinNote(note) {
     await supabase.from('notes').update({ pinned: !note.pinned }).eq('id', note.id)
     const updated = notes.map(n => n.id === note.id ? { ...n, pinned: !note.pinned } : n)
     setNotes(updated)
   }
+
   async function deleteNote(id) {
     await supabase.from('notes').delete().eq('id', id)
     const remaining = notes.filter(n => n.id !== id)
     setNotes(remaining)
     setSelectedNote(remaining[0] || null)
   }
+
   async function updateNote(field, value) {
     const saveValue = field === 'tags' ? JSON.stringify(value) : value
     await supabase.from('notes').update({ [field]: saveValue }).eq('id', selectedNote.id)
@@ -44,6 +104,7 @@ function App() {
     setNotes(updated)
     setSelectedNote({ ...selectedNote, [field]: saveValue })
   }
+
   function addTag(e) {
     if (e.key === 'Enter' && tagInput.trim()) {
       const tag = tagInput.trim().toLowerCase()
@@ -52,11 +113,16 @@ function App() {
       setTagInput('')
     }
   }
+
   function removeTag(tag) {
     const currentTags = JSON.parse(selectedNote.tags || '[]')
     updateNote('tags', currentTags.filter(t => t !== tag))
   }
+
   function getNoteTags(note) { return JSON.parse(note.tags || '[]') }
+
+  if (!user) return <Auth darkMode={darkMode} />
+
   return (
     <div className={`flex h-screen ${darkMode ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-900'}`}>
       <div className={`w-64 p-4 flex flex-col ${darkMode ? 'bg-gray-800' : 'bg-gray-200'}`}>
@@ -64,8 +130,10 @@ function App() {
           <h1 className="text-xl font-bold">My Notes</h1>
           <button onClick={() => setDarkMode(!darkMode)} className="text-xl">{darkMode ? '☀️' : '🌙'}</button>
         </div>
+        <p className="text-xs text-gray-400 mb-3 truncate">{user.email}</p>
         <input className={`px-3 py-2 rounded mb-3 outline-none text-sm ${darkMode ? 'bg-gray-700 text-white' : 'bg-white text-gray-900'}`} placeholder="Search notes..." value={search} onChange={e => setSearch(e.target.value)} />
-        <button onClick={createNote} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded mb-4 text-sm">+ New Note</button>
+        <button onClick={createNote} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded mb-3 text-sm">+ New Note</button>
+        <button onClick={signOut} className="bg-red-700 hover:bg-red-800 text-white px-4 py-2 rounded mb-4 text-sm">Sign Out</button>
         <div className="mb-4">
           <p className="text-gray-400 text-xs mb-2">TAGS</p>
           <div className="flex flex-wrap gap-1">
@@ -105,11 +173,11 @@ function App() {
               <input className="bg-transparent outline-none text-sm text-gray-400" placeholder="Add tag and press Enter..." value={tagInput} onChange={e => setTagInput(e.target.value)} onKeyDown={addTag} />
             </div>
             <div className="flex gap-4 flex-1">
-  <textarea className="bg-transparent text-gray-300 outline-none w-1/2 resize-none text-lg border-r border-gray-700 pr-4" placeholder="Start writing your note..." value={selectedNote.content} onChange={e => updateNote('content', e.target.value)} />
-  <div className="w-1/2 pl-4 prose prose-invert max-w-none overflow-y-auto">
-    <ReactMarkdown>{selectedNote.content || '*Start writing to see preview...*'}</ReactMarkdown>
-  </div>
-</div>
+              <textarea className="bg-transparent text-gray-300 outline-none w-1/2 resize-none text-lg border-r border-gray-700 pr-4" placeholder="Start writing your note..." value={selectedNote.content} onChange={e => updateNote('content', e.target.value)} />
+              <div className="w-1/2 pl-4 prose prose-invert max-w-none overflow-y-auto">
+                <ReactMarkdown>{selectedNote.content || '*Start writing to see preview...*'}</ReactMarkdown>
+              </div>
+            </div>
           </div>
         ) : (
           <div className="text-gray-500 text-center mt-32 text-lg">No notes yet. Click + New Note to start!</div>
