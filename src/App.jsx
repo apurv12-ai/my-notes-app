@@ -13,15 +13,22 @@ function App() {
     if (data) { setNotes(data); setSelectedNote(data[0] || null) }
   }
   const allTags = [...new Set(notes.flatMap(n => JSON.parse(n.tags || '[]')))]
-  const filteredNotes = notes.filter(n => {
-    const tags = JSON.parse(n.tags || '[]')
-    const matchesSearch = n.title.toLowerCase().includes(search.toLowerCase()) || n.content.toLowerCase().includes(search.toLowerCase())
-    const matchesTag = selectedTag ? tags.includes(selectedTag) : true
-    return matchesSearch && matchesTag
-  })
+  const filteredNotes = notes
+    .filter(n => {
+      const tags = JSON.parse(n.tags || '[]')
+      const matchesSearch = n.title.toLowerCase().includes(search.toLowerCase()) || n.content.toLowerCase().includes(search.toLowerCase())
+      const matchesTag = selectedTag ? tags.includes(selectedTag) : true
+      return matchesSearch && matchesTag
+    })
+    .sort((a, b) => (b.pinned === true) - (a.pinned === true))
   async function createNote() {
-    const { data } = await supabase.from('notes').insert({ title: 'Untitled Note', content: '', tags: '[]' }).select()
+    const { data } = await supabase.from('notes').insert({ title: 'Untitled Note', content: '', tags: '[]', pinned: false }).select()
     if (data) { setNotes([data[0], ...notes]); setSelectedNote(data[0]) }
+  }
+  async function pinNote(note) {
+    await supabase.from('notes').update({ pinned: !note.pinned }).eq('id', note.id)
+    const updated = notes.map(n => n.id === note.id ? { ...n, pinned: !note.pinned } : n)
+    setNotes(updated)
   }
   async function deleteNote(id) {
     await supabase.from('notes').delete().eq('id', id)
@@ -51,37 +58,37 @@ function App() {
   function getNoteTags(note) { return JSON.parse(note.tags || '[]') }
   return (
     <div className={`flex h-screen ${darkMode ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-900'}`}>
-      <div className="w-64 bg-gray-800 p-4 flex flex-col">
-        <h1 className="text-xl font-bold mb-4">My Notes</h1>
-<button
-  onClick={() => setDarkMode(!darkMode)}
-  className="text-xl mb-2"
->
-  {darkMode ? '☀️' : '🌙'}
-</button>
-        <input className="bg-gray-700 text-white px-3 py-2 rounded mb-3 outline-none text-sm" placeholder="Search notes..." value={search} onChange={e => setSearch(e.target.value)} />
+      <div className={`w-64 p-4 flex flex-col ${darkMode ? 'bg-gray-800' : 'bg-gray-200'}`}>
+        <div className="flex justify-between items-center mb-4">
+          <h1 className="text-xl font-bold">My Notes</h1>
+          <button onClick={() => setDarkMode(!darkMode)} className="text-xl">{darkMode ? '☀️' : '🌙'}</button>
+        </div>
+        <input className={`px-3 py-2 rounded mb-3 outline-none text-sm ${darkMode ? 'bg-gray-700 text-white' : 'bg-white text-gray-900'}`} placeholder="Search notes..." value={search} onChange={e => setSearch(e.target.value)} />
         <button onClick={createNote} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded mb-4 text-sm">+ New Note</button>
         <div className="mb-4">
           <p className="text-gray-400 text-xs mb-2">TAGS</p>
           <div className="flex flex-wrap gap-1">
-            <span onClick={() => setSelectedTag(null)} className={`px-2 py-1 rounded text-xs cursor-pointer ${selectedTag === null ? 'bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'}`}>All</span>
+            <span onClick={() => setSelectedTag(null)} className={`px-2 py-1 rounded text-xs cursor-pointer ${selectedTag === null ? 'bg-blue-600 text-white' : 'bg-gray-700 text-white hover:bg-gray-600'}`}>All</span>
             {allTags.map(tag => (
-              <span key={tag} onClick={() => setSelectedTag(tag)} className={`px-2 py-1 rounded text-xs cursor-pointer ${selectedTag === tag ? 'bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'}`}>#{tag}</span>
+              <span key={tag} onClick={() => setSelectedTag(tag)} className={`px-2 py-1 rounded text-xs cursor-pointer ${selectedTag === tag ? 'bg-blue-600 text-white' : 'bg-gray-700 text-white hover:bg-gray-600'}`}>#{tag}</span>
             ))}
           </div>
         </div>
         <div className="flex flex-col gap-2 overflow-y-auto">
           {filteredNotes.map(note => (
-            <div key={note.id} onClick={() => setSelectedNote(note)} className={`p-3 rounded cursor-pointer hover:bg-gray-600 group flex justify-between items-center ${selectedNote?.id === note.id ? 'bg-blue-700' : 'bg-gray-700'}`}>
+            <div key={note.id} onClick={() => setSelectedNote(note)} className={`p-3 rounded cursor-pointer group flex justify-between items-center ${selectedNote?.id === note.id ? 'bg-blue-700 text-white' : darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-white hover:bg-gray-300'}`}>
               <div className="flex flex-col">
-                <span className="truncate text-sm">{note.title || 'Untitled Note'}</span>
+                <span className="truncate text-sm">{note.pinned ? '📌 ' : ''}{note.title || 'Untitled Note'}</span>
                 <div className="flex gap-1 mt-1">
                   {getNoteTags(note).map(tag => (
                     <span key={tag} className="text-xs text-blue-300">#{tag}</span>
                   ))}
                 </div>
               </div>
-              <button onClick={e => { e.stopPropagation(); deleteNote(note.id) }} className="text-gray-400 hover:text-red-400 ml-2 hidden group-hover:block">✕</button>
+              <div className="flex gap-1">
+                <button onClick={e => { e.stopPropagation(); pinNote(note) }} className="text-gray-400 hover:text-yellow-400">📌</button>
+                <button onClick={e => { e.stopPropagation(); deleteNote(note.id) }} className="text-gray-400 hover:text-red-400">✕</button>
+              </div>
             </div>
           ))}
         </div>
