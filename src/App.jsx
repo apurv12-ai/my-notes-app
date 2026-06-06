@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import ReactMarkdown from 'react-markdown'
 import { supabase } from './supabaseClient'
 function App() {
   const [notes, setNotes] = useState([])
@@ -103,7 +104,12 @@ function App() {
               ))}
               <input className="bg-transparent outline-none text-sm text-gray-400" placeholder="Add tag and press Enter..." value={tagInput} onChange={e => setTagInput(e.target.value)} onKeyDown={addTag} />
             </div>
-            <textarea className="bg-transparent text-gray-300 outline-none w-full flex-1 resize-none text-lg" placeholder="Start writing your note..." value={selectedNote.content} onChange={e => updateNote('content', e.target.value)} />
+            <div className="flex gap-4 flex-1">
+  <textarea className="bg-transparent text-gray-300 outline-none w-1/2 resize-none text-lg border-r border-gray-700 pr-4" placeholder="Start writing your note..." value={selectedNote.content} onChange={e => updateNote('content', e.target.value)} />
+  <div className="w-1/2 pl-4 prose prose-invert max-w-none overflow-y-auto">
+    <ReactMarkdown>{selectedNote.content || '*Start writing to see preview...*'}</ReactMarkdown>
+  </div>
+</div>
           </div>
         ) : (
           <div className="text-gray-500 text-center mt-32 text-lg">No notes yet. Click + New Note to start!</div>
