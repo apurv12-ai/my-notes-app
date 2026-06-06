@@ -6,6 +6,7 @@ function App() {
   const [search, setSearch] = useState('')
   const [selectedTag, setSelectedTag] = useState(null)
   const [tagInput, setTagInput] = useState('')
+  const [darkMode, setDarkMode] = useState(true)
   useEffect(() => { fetchNotes() }, [])
   async function fetchNotes() {
     const { data } = await supabase.from('notes').select('*').order('created_at', { ascending: false })
@@ -49,9 +50,15 @@ function App() {
   }
   function getNoteTags(note) { return JSON.parse(note.tags || '[]') }
   return (
-    <div className="flex h-screen bg-gray-900 text-white">
+    <div className={`flex h-screen ${darkMode ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-900'}`}>
       <div className="w-64 bg-gray-800 p-4 flex flex-col">
         <h1 className="text-xl font-bold mb-4">My Notes</h1>
+<button
+  onClick={() => setDarkMode(!darkMode)}
+  className="text-xl mb-2"
+>
+  {darkMode ? '☀️' : '🌙'}
+</button>
         <input className="bg-gray-700 text-white px-3 py-2 rounded mb-3 outline-none text-sm" placeholder="Search notes..." value={search} onChange={e => setSearch(e.target.value)} />
         <button onClick={createNote} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded mb-4 text-sm">+ New Note</button>
         <div className="mb-4">
